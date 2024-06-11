@@ -9,12 +9,13 @@ Ts = 0.01; % sampling time (s)
 horizon = 10; % control horizon
 num_samples = 10; % number of samples for MPPI
 lambda = 1.0; % temperature parameter for MPPI
-sigma = [1; 1]; % standard deviation for sampling control inputs
+sigma = [2; 2]; % standard deviation for sampling control inputs
 
 % Define the reference trajectory (straight line for simplicity)
 refTrajectory.x = 0:0.1:100; % x-coordinates
 %refTrajectory.y = 2 * ones(size(refTrajectory.x)); % y-coordinates (lane center at y=2m)
 refTrajectory.y = sqrt(refTrajectory.x)+2; % y-coordinates (lane center at y=2m)
+refTrajectory.v = 10*ones(length(refTrajectory.x),1); % target_velocity(m/s)
 
 goal=[10,10];
 
@@ -25,18 +26,18 @@ theta0 = 0; % initial orientation (rad)
 v0 = 10; % initial velocity (m/s)
 
 % Initial state and control input
-state = [x0; y0; theta0];
-states = zeros(3, length(refTrajectory.x));
+state = [x0; y0; theta0;v0];
+states = zeros(4, length(refTrajectory.x));
 states(:, 1) = state;
 controls = [0; v0]; % initial control input: [delta; velocity]
 
 % Store predicted paths
-predicted_paths = zeros(3, horizon, length(refTrajectory.x) - 1);
+predicted_paths = zeros(4, horizon, length(refTrajectory.x) - 1);
 
 % Main simulation loop
 for k = 1:length(refTrajectory.x) - 1
-    % Current reference position
-    ref = [refTrajectory.x(k); refTrajectory.y(k)];
+   
+
     % 本来はautoware-practiceのPurepursuitみたいな感じで最近傍の距離から目標経路マップを紹介して目標位置と目標車速を出さないといけない
     
     % Generate control samples
@@ -63,21 +64,29 @@ for k = 1:length(refTrajectory.x) - 1
                 valid_sample = false;
                 break;
             end
+
+            min_distance=10000000; % way point最近傍点の初期化
+            for j = 1:length(refTrajectory.x) - 1
+                distance=sqrt((state(1)-refTrajectory.x(j))^2+(state(2)-refTrajectory.y(j))^2); % ユークリッド距離
+                if min_distance>distance
+                    closest_way_point=j;
+                    min_distance=distance;
+                end
+            end
+            % Current reference position
+            ref = [refTrajectory.x(closest_way_point); refTrajectory.y(closest_way_point); refTrajectory.v(closest_way_point)];
             
             % Compute cost (e.g., distance to reference)
-            cost = cost + norm(sample_state(1:2) - ref, 2)+ 0.1*norm(u, 2); 
+            cost = cost + norm(sample_state(1:2) - ref(1:2), 2)+1*norm(sample_state(4)-refTrajectory.v(closest_way_point),1)+ 0.1*norm(u, 2); 
             %refの取り方が不適なのでバグる。目標経路と自車位置の最近傍点を計算し、曲率と道なり距離から将来目標位置を出すべき
-
-            %            cost = cost + norm(sample_state(1:2) - goal, 2);
-%            if i==num_samples
-                cost=cost+10*norm(sample_state(1:2) - ref, 2);
+%            if (sample_state(1)>60)&&(sample_state(1)<80)&&(sample_state(2)<10)&&(sample_state(2)>-10)
+%                cost=cost+1000;
 %            end
-            if (sample_state(1)>60)&&(sample_state(1)<80)&&(sample_state(2)<10)&&(sample_state(2)>-10)
-                cost=cost+1000;
-            end
 
 
         end
+        cost=cost+100*norm(sample_state(1:2) - ref(1:2), 2)+10*norm(sample_state(4)-refTrajectory.v(closest_way_point),1);
+
         if valid_sample
             costs(i) = cost;
         else
@@ -143,5 +152,5 @@ function state = kinematicBicycleModel(state, u, Ts, L, Lr)
     theta = theta + Ts * v * sin(beta) / L;
     
     % Update state
-    state = [x; y; theta];
+    state = [x; y; theta;v];
 end
