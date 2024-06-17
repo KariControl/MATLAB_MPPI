@@ -8,15 +8,15 @@ Lr = 1.25; % distance from rear axle to CoG (m)
 Ts = 0.01; % sampling time (s)
 horizon = 10; % control horizon
 num_samples = 100; % number of samples for MPPI
-lambda = 1.0; % temperature parameter for MPPI
-sigma = [0.5; 0.5]; % standard deviation for sampling control inputs
-
+lambda = 1; % temperature parameter for MPPI
+sigma = [2; 2]; % standard deviation for sampling control inputs
 % Define the reference trajectory (straight line for simplicity)
 refTrajectory.x = 0:0.1:100; % x-coordinates
 refTrajectory.y = sqrt(refTrajectory.x) + 2; % y-coordinates (lane center at y=2m)
 refTrajectory.v = 10 * ones(length(refTrajectory.x), 1); % target velocity (m/s)
 
 goal = [10, 10];
+cov=diag([100,200]);
 
 % Initial conditions
 x0 = 0; % initial x position (m)
@@ -105,7 +105,7 @@ for k = 1:length(refTrajectory.x) - 1
     end
     
     % Update control input based on costs
-    weights = exp(-costs / lambda);
+    weights = exp(-costs / lambda-lambda*sum(controls'*inv(cov)*control_samples,2));
     weights = weights / sum(weights);
     controls = sum(control_samples .* weights, 2);
     
